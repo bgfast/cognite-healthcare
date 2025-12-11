@@ -304,27 +304,53 @@ def main():
     for plan_name, plan_details in plans.items():
         results[plan_name] = calculate_plan_costs(claims, plan_name, plan_details)
     
-    # Sort by total cost
-    sorted_plans = sorted(results.items(), key=lambda x: x[1]['total_cost'])
+    # Apply employer contributions
+    EMPLOYER_HSA_CONTRIBUTION = Decimal('3000.00')  # For HDHP plan
+    EMPLOYER_BONUS = Decimal('3000.00')  # For non-HSA plans (taxable)
+    # Assuming 22% tax bracket for bonus (adjust as needed)
+    TAX_RATE_ON_BONUS = Decimal('0.22')
+    NET_BONUS_AFTER_TAX = EMPLOYER_BONUS * (Decimal('1.00') - TAX_RATE_ON_BONUS)
+    
+    # Adjust costs for employer contributions
+    for plan_name in results:
+        if plan_name == 'HDHP 3400':
+            # HSA contribution is tax-free, full $3,000 benefit
+            results[plan_name]['employer_contribution'] = EMPLOYER_HSA_CONTRIBUTION
+            results[plan_name]['net_cost'] = results[plan_name]['total_cost'] - EMPLOYER_HSA_CONTRIBUTION
+        else:
+            # Bonus is taxable income
+            results[plan_name]['employer_contribution'] = NET_BONUS_AFTER_TAX
+            results[plan_name]['gross_bonus'] = EMPLOYER_BONUS
+            results[plan_name]['net_cost'] = results[plan_name]['total_cost'] - NET_BONUS_AFTER_TAX
+    
+    # Sort by net cost (after employer contributions)
+    sorted_plans = sorted(results.items(), key=lambda x: x[1]['net_cost'])
     
     for i, (plan_name, costs) in enumerate(sorted_plans, 1):
         print(f"\n{i}. {plan_name}")
         print(f"   Annual Premium:        ${costs['annual_premium']:,.2f}")
         print(f"   Deductible Paid:       ${costs['deductible_paid']:,.2f}")
         print(f"   Out-of-Pocket Costs:   ${costs['out_of_pocket']:,.2f}")
-        print(f"   TOTAL ANNUAL COST:     ${costs['total_cost']:,.2f}")
+        print(f"   Total Cost (Before):   ${costs['total_cost']:,.2f}")
+        if plan_name == 'HDHP 3400':
+            print(f"   Employer HSA Contrib: -${costs['employer_contribution']:,.2f} (tax-free)")
+        else:
+            print(f"   Employer Bonus:       ${costs['gross_bonus']:,.2f}")
+            print(f"   After Tax (22%):      -${costs['employer_contribution']:,.2f}")
+        print(f"   NET ANNUAL COST:       ${costs['net_cost']:,.2f}")
     
     print("\n" + "=" * 80)
     print("RECOMMENDATION")
     print("=" * 80)
     
     best_plan = sorted_plans[0][0]
-    best_cost = sorted_plans[0][1]['total_cost']
-    savings_vs_worst = sorted_plans[-1][1]['total_cost'] - best_cost
+    best_net_cost = sorted_plans[0][1]['net_cost']
+    worst_net_cost = sorted_plans[-1][1]['net_cost']
+    savings_vs_worst = worst_net_cost - best_net_cost
     
-    print(f"\nBased on your 2025 YTD usage patterns:")
+    print(f"\nBased on your 2025 YTD usage patterns (with employer contributions):")
     print(f"  RECOMMENDED PLAN: {best_plan}")
-    print(f"  Estimated Annual Cost: ${best_cost:,.2f}")
+    print(f"  Net Annual Cost (after employer contribution): ${best_net_cost:,.2f}")
     print(f"  Potential Savings vs Most Expensive: ${savings_vs_worst:,.2f}")
     
     print("\n" + "-" * 80)
@@ -335,9 +361,11 @@ def main():
     print("   - Whether providers are in-network")
     print("   - Prescription drug tiers")
     print("   - Future medical needs")
-    print("3. HDHP 3400 offers HSA eligibility (tax benefits)")
-    print("4. OAP plans have lower deductibles but higher premiums")
-    print("5. Consider your family's expected medical needs for 2026")
+    print("3. HDHP 3400: Employer contributes $3,000 to HSA (tax-free)")
+    print("4. OAP Plans: Employer provides $3,000 bonus (taxable - ~$2,340 after 22% tax)")
+    print("5. OAP plans have lower deductibles but higher premiums")
+    print("6. Consider your family's expected medical needs for 2026")
+    print("\nNote: Tax rate on bonus assumed at 22%. Adjust if your bracket differs.")
 
 if __name__ == '__main__':
     main()
